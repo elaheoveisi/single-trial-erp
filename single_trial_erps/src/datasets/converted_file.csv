@@ -1,5 +1,0 @@
-onset,duration,trial_type,trigger_id
-1.5,0.5,RAND_DARK,14
-2.0,0.5,RAND_LIGHT,13
-2.5,0.5,REF_DARK,12
-3.0,0.5,REF_LIGHT,11
