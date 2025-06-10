@@ -13,8 +13,8 @@ raw = mne.io.read_raw_bdf(raw_path, preload=True)
 print(raw)               # Print summary info about the raw object
 print(raw.info)          # Print detailed info about EEG channels, sampling rate, etc.
 
-# Plot the first 64 channels of the EEG data for inspection
-raw.plot(n_channels=64, scalings='auto', title='Raw EEG Data', show=True)
+# Plot the first 72 channels of the EEG data for inspection
+raw.plot(n_channels=72, scalings='auto', title='Raw EEG Data', show=True)
 
 # Plot the first 72 channels (in case you want to see more, e.g., EOG, triggers)
 raw.plot(n_channels=72, scalings='auto', title='Raw EEG Data', show=True)
