@@ -1,0 +1,159 @@
+from pathlib import Path              
+import mne                           
+import pandas as pd                  
+import numpy as np                  
+import matplotlib
+from time import time
+import mne
+from mne.datasets import sample
+from mne.preprocessing import ICA
+
+
+print(__doc__)
+# Set the path to the raw BDF EEG data file
+sample_data_raw_file = Path(r"C:\Users\elahe\Downloads\sub-001_task-lumfront_eeg.bdf")
+
+# Load the BDF EEG data, preload=True loads all data into RAM for faster access
+raw = mne.io.read_raw_bdf(sample_data_raw_file, preload=True)
+
+
+print(raw)               
+print(raw.info)          
+
+
+import mne
+
+def find_events_and_define_ids(raw):
+    """
+    Finds events in raw EEG data and returns the events array and event ID mapping.
+
+    Parameters:
+    - raw (mne.io.Raw): The raw EEG data object.
+
+    Returns:
+    - events (ndarray): Array of shape (n_events, 3) with event onset, previous value, and event code.
+    - event_id (dict): Dictionary mapping event names to event codes.
+    """
+    # Detect events from stimulus channel
+    events = mne.find_events(raw, stim_channel='STI 014', verbose=False)
+
+    # Define your specific event codes
+    event_id = {
+        "REF_LIGHT": 11,
+        "REF_DARK": 12,
+        "RAND_LIGHT": 13,
+        "RAND_DARK": 14
+    }
+    plt.show()
+    return events, event_id
+
+def create_plot_evoked_average(raw, events, event_id, tmin=-0.2, tmax=0.8):
+    """
+    Creates epochs, computes average evoked response, and plots all channels.
+
+    Parameters:
+    - raw (mne.io.Raw): The raw EEG data.
+    - events (ndarray): The events array from mne.find_events.
+    - event_id (dict): Dictionary of event labels to event codes.
+    - tmin (float): Start time before event (default: -0.2s).
+    - tmax (float): End time after event (default: 0.8s).
+
+    Returns:
+    - evoked (mne.Evoked): The averaged evoked object.
+    """
+    # Create epochs
+    epochs = mne.Epochs(raw, events, event_id=event_id, tmin=tmin, tmax=tmax,
+                        preload=True, baseline=(None, 0), verbose=False)
+
+    # Set consistent y-axis limits
+    plot_kwargs = dict(picks="all", ylim=dict(eeg=(-10, 10), eog=(-5, 15)))
+
+    # Average all epochs and plot
+    evoked = epochs.average()
+    fig = evoked.plot(**plot_kwargs)
+    fig.set_size_inches(6, 6)
+
+    return evoked
+
+
+
+def bandpass_filter(raw, l_freq=0.3, h_freq=40):
+    """
+    Apply a band-pass filter to EEG data.
+
+    Parameters:
+    - raw (mne.io.Raw): The raw EEG data object.
+    - l_freq (float): Low cutoff frequency in Hz (default is 0.3 Hz).
+    - h_freq (float): High cutoff frequency in Hz (default is 40 Hz).
+
+    Returns:
+    - raw_filtered (mne.io.Raw): The filtered EEG data.
+    """
+    raw_filtered = raw.copy().filter(l_freq=l_freq, h_freq=h_freq, fir_design='firwin')
+    return raw_filtered
+
+
+def plot_raw_eeg_and_show_bads(bdf_file_path, crop_seconds=60, n_channels=72):
+    """
+    Loads a BDF EEG file, crops it, plots EEG channels, and prints bad channels.
+
+    Parameters:
+    - bdf_file_path (str or Path): Full path to the BDF EEG file.
+    - crop_seconds (int): Number of seconds to crop from the start (default is 60).
+    - n_channels (int): Number of EEG channels to show in the plot (default is 72).
+    """
+    # Load the raw EEG data
+    raw = mne.io.read_raw_bdf(bdf_file_path, preload=True, verbose=False)
+    
+    # Crop to the first `crop_seconds` seconds
+    raw.crop(tmin=0, tmax=crop_seconds)
+    
+    # Load data and plot
+    raw.load_data()
+    raw.plot(n_channels=n_channels, scalings='auto', title='Raw EEG Data', show=True)
+    
+    # Print bad channels
+    print("Bad channels:", raw.info["bads"])
+
+def plot_psd(raw, fmax=40):
+    """
+    Parameters:
+    - raw: mne.io.Raw
+        The raw EEG data object.
+    - fmax: float, optional (default=250)
+        The maximum frequency to display in the PSD plot.
+
+    Returns:
+    - fig: matplotlib.figure.Figure
+        The PSD figure object for further use or customization.
+    """
+    fig = raw.compute_psd(tmax=np.inf, fmax=fmax).plot(
+        average=True,
+        amplitude=False,
+        picks="data",
+        exclude="bads"
+    )
+    return fig
+
+
+import matplotlib.pyplot as plt
+
+def plot_field_distribution(fields, counts, colors=None, title="Frequency of prevalent fields of TSA studies"):
+    """
+    Plots a pie chart showing the frequency distribution of study fields.
+
+    Parameters:
+    - fields (list of str): Names of fields (e.g., 'Aviation', 'Robotics').
+    - counts (list of int): Frequency of each field.
+    - colors (list of str, optional): Custom colors for the pie chart.
+    - title (str): Title of the chart.
+    """
+    plt.figure(figsize=(8, 6))
+    wedges, texts = plt.pie(counts, colors=colors, startangle=140)
+
+    # Add legend
+    plt.legend(wedges, fields, title="Fields", loc="upper center", bbox_to_anchor=(0.5, 1.15), ncol=2)
+    plt.title(title)
+    plt.axis('equal')  # Equal aspect ratio ensures the pie is circular.
+    plt.tight_layout()
+    plt.show()
