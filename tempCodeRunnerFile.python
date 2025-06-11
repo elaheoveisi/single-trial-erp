@@ -1,126 +1,71 @@
-from pathlib import Path              
-import mne                           
-import pandas as pd                  
-import numpy as np                  
 import matplotlib
+matplotlib.use('TkAgg')
+import matplotlib.pyplot as plt
 from time import time
 import mne
-from mne.datasets import sample
+from mne.channels import make_standard_montage
 from mne.preprocessing import ICA
+import numpy as np
+import os
 
-
-print(__doc__)
-# Set the path to the raw BDF EEG data file
-sample_data_raw_file = Path(r"C:\Users\elahe\Downloads\sub-001_task-lumfront_eeg.bdf")
-
-# Load the BDF EEG data, preload=True loads all data into RAM for faster access
-raw = mne.io.read_raw_bdf(sample_data_raw_file, preload=True)
-
-
-print(raw)               
-print(raw.info)          
-
-
+from pathlib import Path
 import mne
 
-def find_events_and_define_ids(raw):
+def load_and_plot_raw_eeg(file_path=r"C:\Users\elahe\Downloads\sub-001_task-lumfront_eeg.bdf", n_channels=72):
     """
-    Finds events in raw EEG data and returns the events array and event ID mapping.
+    Load and plot raw EEG data from a BDF file.
 
     Parameters:
-    - raw (mne.io.Raw): The raw EEG data object.
+    - file_path: str
+        Path to the BDF file.
+    - n_channels: int
+        Number of channels to display in the plot.
 
     Returns:
-    - events (ndarray): Array of shape (n_events, 3) with event onset, previous value, and event code.
-    - event_id (dict): Dictionary mapping event names to event codes.
+    - raw: mne.io.Raw
+        The loaded raw EEG object.
     """
-    # Detect events from stimulus channel
-    events = mne.find_events(raw, stim_channel='STI 014', verbose=False)
+    sample_data_raw_file = Path(file_path)
 
-    # Define your specific event codes
-    event_id = {
-        "REF_LIGHT": 11,
-        "REF_DARK": 12,
-        "RAND_LIGHT": 13,
-        "RAND_DARK": 14
-    }
-    plt.show()
-    return events, event_id
+    # Load the BDF EEG data
+    raw = mne.io.read_raw_bdf(sample_data_raw_file, preload=True)
 
-def create_plot_evoked_average(raw, events, event_id, tmin=-0.2, tmax=0.8):
-    """
-    Creates epochs, computes average evoked response, and plots all channels.
+    # Print summary and detailed info
+    print(raw)
+    print(raw.info)
 
-    Parameters:
-    - raw (mne.io.Raw): The raw EEG data.
-    - events (ndarray): The events array from mne.find_events.
-    - event_id (dict): Dictionary of event labels to event codes.
-    - tmin (float): Start time before event (default: -0.2s).
-    - tmax (float): End time after event (default: 0.8s).
-
-    Returns:
-    - evoked (mne.Evoked): The averaged evoked object.
-    """
-    # Create epochs
-    epochs = mne.Epochs(raw, events, event_id=event_id, tmin=tmin, tmax=tmax,
-                        preload=True, baseline=(None, 0), verbose=False)
-
-    # Set consistent y-axis limits
-    plot_kwargs = dict(picks="all", ylim=dict(eeg=(-10, 10), eog=(-5, 15)))
-
-    # Average all epochs and plot
-    evoked = epochs.average()
-    fig = evoked.plot(**plot_kwargs)
-    fig.set_size_inches(6, 6)
-
-    return evoked
-
-
-
-def bandpass_filter(raw, l_freq=0.3, h_freq=40):
-    """
-    Apply a band-pass filter to EEG data.
-
-    Parameters:
-    - raw (mne.io.Raw): The raw EEG data object.
-    - l_freq (float): Low cutoff frequency in Hz (default is 0.3 Hz).
-    - h_freq (float): High cutoff frequency in Hz (default is 40 Hz).
-
-    Returns:
-    - raw_filtered (mne.io.Raw): The filtered EEG data.
-    """
-    raw_filtered = raw.copy().filter(l_freq=l_freq, h_freq=h_freq, fir_design='firwin')
-    return raw_filtered
-
-
-def plot_raw_eeg_and_show_bads(bdf_file_path, crop_seconds=60, n_channels=72):
-    """
-    Loads a BDF EEG file, crops it, plots EEG channels, and prints bad channels.
-
-    Parameters:
-    - bdf_file_path (str or Path): Full path to the BDF EEG file.
-    - crop_seconds (int): Number of seconds to crop from the start (default is 60).
-    - n_channels (int): Number of EEG channels to show in the plot (default is 72).
-    """
-    # Load the raw EEG data
-    raw = mne.io.read_raw_bdf(bdf_file_path, preload=True, verbose=False)
-    
-    # Crop to the first `crop_seconds` seconds
-    raw.crop(tmin=0, tmax=crop_seconds)
-    
-    # Load data and plot
-    raw.load_data()
+    # Plot EEG data
     raw.plot(n_channels=n_channels, scalings='auto', title='Raw EEG Data', show=True)
-    
-    # Print bad channels
-    print("Bad channels:", raw.info["bads"])
 
+    return raw
+
+def load_and_plot_raw_bdf(file_path, n_channels=64, title='Raw EEG Data'):
+    """
+    Load BDF file and plot the first `n_channels` channels.
+    """
+    raw = mne.io.read_raw_bdf(file_path, preload=True, verbose=False)
+    print("Initial Raw Info:")
+    print(raw)
+    print("Detailed Info:")
+    print(raw.info)
+    raw.plot(n_channels=n_channels, scalings='auto', title=title, show=True)
+    print("Bad channels before cropping:", raw.info["bads"])
+    return raw
+
+def crop_and_replot(raw, crop_start=0, crop_end=60):
+    """
+    Crop bad channels
+    """
+    raw.crop(crop_start, crop_end).load_data()
+    raw.plot(scalings='auto', title='Cropped EEG Data', show=True)
+    print("Bad channels after cropping:", raw.info["bads"])
+    return raw
 def plot_psd(raw, fmax=40):
     """
     Parameters:
     - raw: mne.io.Raw
         The raw EEG data object.
-    - fmax: float, optional (default=250)
+    - fmax: float, optional (default=250)# we regarded 40
         The maximum frequency to display in the PSD plot.
 
     Returns:
@@ -133,27 +78,101 @@ def plot_psd(raw, fmax=40):
         picks="data",
         exclude="bads"
     )
+    plt.show()
     return fig
 
+if __name__ == "__main__":
+    raw  = load_and_plot_raw_eeg()
+    plot_psd(raw)
 
-import matplotlib.pyplot as plt
 
-def plot_field_distribution(fields, counts, colors=None, title="Frequency of prevalent fields of TSA studies"):
+print(raw.info['ch_names'])    # Print all channel names (e.g., EEG, EOG, triggers)
+
+# Pick only EEG, EOG, and stimulus (trigger) channels for further analysis
+raw.pick(["eeg", "eog", "stim"])
+raw = load_and_plot_raw_eeg()
+                # Ensure the selected data is loaded into memory
+
+
+
+
+def filter_and_find_events(raw, l_freq=0.3, h_freq=40):
     """
-    Plots a pie chart showing the frequency distribution of study fields.
+    Apply a bandpass filter and find events in the EEG data.
+    
+    Parameters:
+        raw (mne.io.Raw): The raw EEG object.
+        l_freq (float): Low cutoff frequency.
+        h_freq (float): High cutoff frequency.
+    
+    Returns:
+        raw (mne.io.Raw): The filtered EEG object.
+        events (ndarray): The array of events.
+        event_id (dict): Dictionary mapping event names to codes.
+    """
+    # Apply bandpass filter to remove slow drifts and high-frequency noise
+    raw.filter(l_freq, h_freq)
+    
+    # Find events in the stimulus channel
+    events = mne.find_events(raw)
+
+    # Define the mapping from event names to event codes
+    event_id = {
+        "REF_LIGHT": 11,
+        "REF_DARK": 12,
+        "RAND_LIGHT": 13,
+        "RAND_DARK": 14
+    }
+
+    print(f"Found {len(events)} events.")
+    return raw, events, event_id
+
+def create_epochs_and_plot_average(raw, events, event_id):
+    """
+    Create epochs, plot the average evoked response, and handle SSP projectors.
 
     Parameters:
-    - fields (list of str): Names of fields (e.g., 'Aviation', 'Robotics').
-    - counts (list of int): Frequency of each field.
-    - colors (list of str, optional): Custom colors for the pie chart.
-    - title (str): Title of the chart.
-    """
-    plt.figure(figsize=(8, 6))
-    wedges, texts = plt.pie(counts, colors=colors, startangle=140)
+        raw (mne.io.Raw): Filtered raw EEG data.
+        events (ndarray): Events found in the raw data.
+        event_id (dict): Mapping of event names to event codes.
 
-    # Add legend
-    plt.legend(wedges, fields, title="Fields", loc="upper center", bbox_to_anchor=(0.5, 1.15), ncol=2)
-    plt.title(title)
-    plt.axis('equal')  # Equal aspect ratio ensures the pie is circular.
-    plt.tight_layout()
+    Returns:
+        epochs (mne.Epochs): The epoched data.
+        ssp_projectors (list): The list of SSP projectors from raw.info.
+    """
+    # Epoch the data
+    epochs = mne.Epochs(raw, events, event_id=event_id, preload=True)
+
+    # Plot evoked response for all channels with consistent axis limits
+    plot_kwargs = dict(picks="all", ylim=dict(eeg=(-10, 10), eog=(-5, 15)))
+    fig = epochs.average().plot(**plot_kwargs)
+    fig.set_size_inches(6, 6)
     plt.show()
+
+    # Save and remove SSP projectors
+    ssp_projectors = raw.info["projs"]
+    raw.del_proj()
+
+    return epochs, ssp_projectors
+
+def extract_and_plot_eog_epochs(raw, baseline=(-0.5, -0.2)):
+    """
+    Extracts EOG epochs and plots EOG activity.
+
+    Parameters:
+        raw (mne.io.Raw): The preprocessed EEG data.
+        baseline (tuple): Baseline correction interval (in seconds).
+
+    Returns:
+        eog_epochs (mne.Epochs): The epochs time-locked to EOG events.
+    """
+    # Create EOG epochs (detects blinks/saccades)
+    eog_epochs = mne.preprocessing.create_eog_epochs(raw, baseline=baseline)
+    
+    # Plot time x trial image of EOG activity
+    eog_epochs.plot_image(combine="mean", title="EOG Epochs Image")
+
+    # Plot average EOG response with topography
+    eog_epochs.average().plot_joint(title="EOG Average Response")
+
+    return eog_epochs
