@@ -11,7 +11,7 @@ import os
 from pathlib import Path
 import mne
 
-def load_and_plot_raw_eeg(file_path=r"C:\Users\elahe\Downloads\sub-001_task-lumfront_eeg.bdf", n_channels=72):
+def load_and_plot_raw_eeg(file_path=r"C:\Users\elahe\Downloads\sub-001_task-lumfront_eeg.bdf", n_channels=64):
     """
     Load and plot raw EEG data from a BDF file.
 
@@ -39,6 +39,14 @@ def load_and_plot_raw_eeg(file_path=r"C:\Users\elahe\Downloads\sub-001_task-lumf
 
     return raw
 
+def set_montage(raw):
+    """Apply a standard montage for channel locations, ignoring missing channels."""
+    montage = make_standard_montage('standard_1005')  # 10-10 system for  72 channels
+    raw.set_montage(montage, on_missing='ignore')  # Ignore unmapped EXG channels
+    return raw
+
+
+
 def load_and_plot_raw_bdf(file_path, n_channels=64, title='Raw EEG Data'):
     """
     Load BDF file and plot the first `n_channels` channels.
@@ -52,7 +60,7 @@ def load_and_plot_raw_bdf(file_path, n_channels=64, title='Raw EEG Data'):
     print("Bad channels before cropping:", raw.info["bads"])
     return raw
 
-def crop_and_replot(raw, crop_start=0, crop_end=60):
+def crop_and_replot(raw, crop_start=0, crop_end=300):
     """
     Crop bad channels
     """
@@ -60,6 +68,7 @@ def crop_and_replot(raw, crop_start=0, crop_end=60):
     raw.plot(scalings='auto', title='Cropped EEG Data', show=True)
     print("Bad channels after cropping:", raw.info["bads"])
     return raw
+
 def plot_psd(raw, fmax=40):
     """
     Parameters:
@@ -86,37 +95,74 @@ if __name__ == "__main__":
     plot_psd(raw)
 
 
-print(raw.info['ch_names'])    # Print all channel names (e.g., EEG, EOG, triggers)
-
-# Pick only EEG, EOG, and stimulus (trigger) channels for further analysis
-raw.pick(["eeg", "eog", "stim"])
-raw = load_and_plot_raw_eeg()
-                # Ensure the selected data is loaded into memory
+def apply_filter(raw, l_freq=1, h_freq=40, fir_design="firwin"):
+    """Apply bandpass filter to raw data."""
+    raw.filter(l_freq, h_freq, fir_design=fir_design)
+    return raw
 
 
 
 
-def filter_and_find_events(raw, l_freq=0.3, h_freq=40):
+def pick_eeg_channels(raw):
+    """Select only EEG channels, excluding EXG."""
+    raw.pick([ch for ch in raw.ch_names if not ch.startswith('EXG')])
+    return raw
+
+def get_reject_criteria(threshold_eeg=150e-6):
+    """Return dictionary for rejection criteria."""
+    return dict(eeg=threshold_eeg)
+
+
+def run_ica(raw, reject=None, n_components=20):
+    """Fit ICA on raw data and plot components."""
+    ica = ICA(n_components=n_components, method="picard", random_state=0)
+    t0 = time()
+    ica.fit(raw, reject=reject)
+    fit_time = time() - t0
+    title = f"ICA decomposition using picard (took {fit_time:.1f}s)"
+    ica.plot_components(title=title)
+    plt.show()
+    return ica
+
+if __name__ == "__main__":
+    # Process data step by step
+    raw = raw = load_and_plot_raw_eeg()
+    raw = set_montage(raw)
+    raw = pick_eeg_channels(raw)
+    raw = apply_filter(raw)
+    reject_criteria = get_reject_criteria()
+    ica = run_ica(raw, reject=reject_criteria)
+
+
+
+
+
+
+
+
+def extract_events_from_status(raw):
     """
-    Apply a bandpass filter and find events in the EEG data.
-    
+    Extracts events from the ':Status' stimulus channel in the EEG recording.
+
     Parameters:
-        raw (mne.io.Raw): The raw EEG object.
-        l_freq (float): Low cutoff frequency.
-        h_freq (float): High cutoff frequency.
-    
-    Returns:
-        raw (mne.io.Raw): The filtered EEG object.
-        events (ndarray): The array of events.
-        event_id (dict): Dictionary mapping event names to codes.
-    """
-    # Apply bandpass filter to remove slow drifts and high-frequency noise
-    raw.filter(l_freq, h_freq)
-    
-    # Find events in the stimulus channel
-    events = mne.find_events(raw)
+    - raw: mne.io.Raw
+        The raw EEG data object.
 
-    # Events codes
+    Returns:
+    - raw: mne.io.Raw
+        The raw object (with channel type updated if needed).
+    - events: ndarray, shape (n_events, 3)
+        The events array with sample index, previous value, and new value.
+    - event_id: dict
+        A dictionary mapping event labels to their corresponding integer codes.
+    """
+    # Make sure MNE treats ':Status' as a stim channel
+    raw.set_channel_types({':Status': 'stim'})
+
+    # Detect events from ':Status' channel
+    events = mne.find_events(raw, stim_channel=':Status')
+
+    # Define event code labels
     event_id = {
         "REF_LIGHT": 11,
         "REF_DARK": 12,
@@ -124,8 +170,12 @@ def filter_and_find_events(raw, l_freq=0.3, h_freq=40):
         "RAND_DARK": 14
     }
 
-    print(f"Found {len(events)} events.")
+    print(f"Found {len(events)} events from ':Status' channel.")
     return raw, events, event_id
+
+
+
+
 
 def create_epochs_and_plot_average(raw, events, event_id):
     """
@@ -149,11 +199,6 @@ def create_epochs_and_plot_average(raw, events, event_id):
     fig.set_size_inches(6, 6)
     plt.show()
 
-    # Save and remove SSP projectors
-    ssp_projectors = raw.info["projs"]
-    raw.del_proj()
-
-    return epochs, ssp_projectors
 
 def extract_and_plot_eog_epochs(raw, baseline=(-0.5, -0.2)):
     """
