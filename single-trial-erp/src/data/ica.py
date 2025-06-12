@@ -47,6 +47,20 @@ def run_ica(raw, reject=None, n_components=20):
     return ica
 
 
+def print_ica_explained_variance(ica, raw):
+    """
+    Print the fraction of variance explained by ICA components for each channel type.
+    
+    Parameters:
+    - ica: The fitted ICA object
+    - raw: The filtered EEG data used to fit the ICA
+    """
+    explained_var_ratio = ica.get_explained_variance_ratio(raw)
+    for ch_type, ratio in explained_var_ratio.items():
+        print(f"Fraction of {ch_type} variance explained by all components: {ratio:.4f}")
+
+
+
 def plot_possible_artifact_channels(raw):
     """
     Plot frontal EEG channels to inspect for eye/motion artifacts in absence of EOG/ECG.
@@ -67,3 +81,4 @@ if __name__ == "__main__":
     reject_criteria = get_reject_criteria()
     ica = run_ica(raw, reject=reject_criteria)
 
+print_ica_explained_variance(ica, raw)
