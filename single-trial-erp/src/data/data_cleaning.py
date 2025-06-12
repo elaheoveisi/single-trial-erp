@@ -11,7 +11,7 @@ import os
 from pathlib import Path
 import mne
 
-def load_and_plot_raw_eeg(file_path=r"C:\Users\elahe\Downloads\sub-001_task-lumfront_eeg.bdf", n_channels=64):
+def load_and_plot_raw_eeg(file_path=r"C:\Users\elahe\Downloads\sub-001_task-lumfront_eeg.bdf", n_channels=72):
     """
     Load and plot raw EEG data from a BDF file.
 
