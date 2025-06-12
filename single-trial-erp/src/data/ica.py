@@ -31,6 +31,10 @@ def get_reject_criteria(threshold_eeg=150e-6):
     """Return dictionary for rejection criteria."""
     return dict(eeg=threshold_eeg)
 
+
+
+
+
 def run_ica(raw, reject=None, n_components=20):
     """Fit ICA on raw data and plot components."""
     ica = ICA(n_components=n_components, method="picard", random_state=0)
@@ -42,11 +46,39 @@ def run_ica(raw, reject=None, n_components=20):
     plt.show()
     return ica
 
+
+def print_ica_explained_variance(ica, raw):
+    """
+    Print the fraction of variance explained by ICA components for each channel type.
+    
+    Parameters:
+    - ica: The fitted ICA object
+    - raw: The filtered EEG data used to fit the ICA
+    """
+    explained_var_ratio = ica.get_explained_variance_ratio(raw)
+    for ch_type, ratio in explained_var_ratio.items():
+        print(f"Fraction of {ch_type} variance explained by all components: {ratio:.4f}")
+
+
+
+def plot_possible_artifact_channels(raw):
+    """
+    Plot frontal EEG channels to inspect for eye/motion artifacts in absence of EOG/ECG.
+    """
+    possible_artifact_channels = [ch for ch in raw.ch_names if ch.startswith(('Fp', 'AF', 'Fz', 'FT'))]
+    picks = mne.pick_channels(raw.ch_names, possible_artifact_channels)
+    raw.plot(order=picks, n_channels=len(picks), show_scrollbars=False)
+
+
+
 if __name__ == "__main__":
     # Process data step by step
     raw = load_raw_data()
     raw = set_montage(raw)
     raw = pick_eeg_channels(raw)
     raw = apply_filter(raw)
+    plot_possible_artifact_channels(raw)
     reject_criteria = get_reject_criteria()
     ica = run_ica(raw, reject=reject_criteria)
+
+print_ica_explained_variance(ica, raw)

@@ -6,5 +6,5 @@ from utils import skip_run
 config_path = "configs/config.yml"
 config = yaml.load(open(str(config_path)), Loader=yaml.SafeLoader)
 
-with skip_run("skip", "Data") as check, check():
-    pass
+with skip_run("skip", "crop_and_replot") as check, check():
+    pass  
