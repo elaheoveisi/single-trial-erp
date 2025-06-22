@@ -83,16 +83,14 @@ def validate_results(raw, epochs=None):
 # Main function to run all steps
 def run_ica_pipeline():
     raw = load_raw_data()
-    raw = set_montage(raw)             # <--- Add this
-    raw = pick_eeg_channels(raw)       # <--- Add this
+    raw = set_montage(raw)             
+    raw = pick_eeg_channels(raw)       
     raw = preprocess_data(raw)
     ica = run_ica(raw)
     visualize_components(ica, raw)
-    exclude_artifacts(ica)             # <--- Fix: remove `=`, it returns None
+    exclude_artifacts(ica)             
     raw = apply_ica(ica, raw)
-    # Optional: Add event extraction here if needed
-    # epochs = create_epochs(raw)
-    validate_results(raw, None)        # You can pass `epochs` here if available
+    validate_results(raw, None)       
 
 # Run the pipeline
 run_ica_pipeline()
