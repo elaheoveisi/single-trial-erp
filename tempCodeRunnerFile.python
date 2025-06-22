@@ -5,174 +5,67 @@ from time import time
 import mne
 from mne.channels import make_standard_montage
 from mne.preprocessing import ICA
-import numpy as np
-import os
 
-from pathlib import Path
-import mne
+def load_raw_data(raw_fname=r"C:\Users\elahe\Downloads\sub-001_task-lumfront_eeg.bdf", tmin=0, tmax=60):
+    """Load and crop raw EEG data."""
+    try:
+        raw = mne.io.read_raw_bdf(raw_fname, preload=True).crop(tmin, tmax)
+        return raw
+    except FileNotFoundError:
+        raise FileNotFoundError(f"Could not find file: {raw_fname}")
 
-def load_and_plot_raw_eeg(file_path=r"C:\Users\elahe\Downloads\sub-001_task-lumfront_eeg.bdf", n_channels=72):
-    """
-    Load and plot raw EEG data from a BDF file.
-
-    Parameters:
-    - file_path: str
-        Path to the BDF file.
-    - n_channels: int
-        Number of channels to display in the plot.
-
-    Returns:
-    - raw: mne.io.Raw
-        The loaded raw EEG object.
-    """
-    sample_data_raw_file = Path(file_path)
-
-    # Load the BDF EEG data
-    raw = mne.io.read_raw_bdf(sample_data_raw_file, preload=True)
-
-    # Print summary and detailed info
-    print(raw)
-    print(raw.info)
-
-    # Plot EEG data
-    raw.plot(n_channels=n_channels, scalings='auto', title='Raw EEG Data', show=True)
-
+def set_montage(raw):
+    """Apply a standard montage for channel locations, ignoring missing channels."""
+    montage = make_standard_montage('standard_1005')  # 10-10 system
+    raw.set_montage(montage, on_missing='warn')  # Warn about unmapped channels
     return raw
 
-def load_and_plot_raw_bdf(file_path, n_channels=64, title='Raw EEG Data'):
-    """
-    Load BDF file and plot the first `n_channels` channels.
-    """
-    raw = mne.io.read_raw_bdf(file_path, preload=True, verbose=False)
-    print("Initial Raw Info:")
-    print(raw)
-    print("Detailed Info:")
-    print(raw.info)
-    raw.plot(n_channels=n_channels, scalings='auto', title=title, show=True)
-    print("Bad channels before cropping:", raw.info["bads"])
+def pick_eeg_channels(raw):
+    """Select only EEG channels, excluding EXG."""
+    eeg_channels = [ch for ch in raw.ch_names if not ch.startswith('EXG')]
+    if not eeg_channels:
+        raise ValueError("No EEG channels found in the data.")
+    raw.pick(eeg_channels)
     return raw
 
-def crop_and_replot(raw, crop_start=0, crop_end=60):
-    """
-    Crop bad channels
-    """
-    raw.crop(crop_start, crop_end).load_data()
-    raw.plot(scalings='auto', title='Cropped EEG Data', show=True)
-    print("Bad channels after cropping:", raw.info["bads"])
+def preprocess_data(raw):
+    """Preprocess raw data with bandpass filter."""
+    raw.filter(l_freq=1.0, h_freq=60.0)
     return raw
-def plot_psd(raw, fmax=40):
-    """
-    Parameters:
-    - raw: mne.io.Raw
-        The raw EEG data object.
-    - fmax: float, optional (default=250)# we regarded 40
-        The maximum frequency to display in the PSD plot.
 
-    Returns:
-    - fig: matplotlib.figure.Figure
-        The PSD figure object for further use or customization.
-    """
-    fig = raw.compute_psd(tmax=np.inf, fmax=fmax).plot(
-        average=True,
-        amplitude=False,
-        picks="data",
-        exclude="bads"
-    )
-    plt.show()
-    return fig
+def run_ica(raw, reject=None, n_components=20):
+    """Fit ICA on raw data and plot components."""
+    ica = ICA(n_components=n_components, method="picard", random_state=0)
+    t0 = time()
+    ica.fit(raw, reject=reject)
+    fit_time = time() - t0
+    title = f"ICA decomposition using picard (took {fit_time:.1f}s)"
+    ica.plot_components(title=title, inst=raw, show=True)
+    return ica
+
+def exclude_artifacts(ica):
+    """Manually exclude artifact-related components."""
+    ica.exclude = [0, 3, 5]  # Replace with indices of artifact components after inspection
+    return ica
+
+def apply_ica(ica, raw):
+    """Apply ICA to remove artifacts."""
+    raw = ica.apply(raw)
+    return raw
+
+def validate_results(raw):
+    raw.plot(scalings='auto', n_channels=64, duration=20, show=True)  # Show 10 channels, 20 seconds
+
+def run_ica_pipeline():
+    """Run the complete ICA preprocessing pipeline."""
+    raw = load_raw_data()
+    raw = set_montage(raw)  # Apply montage
+    raw = pick_eeg_channels(raw)  # Select EEG channels
+    raw = preprocess_data(raw)  # Filter data
+    ica = run_ica(raw)  # Fit and plot ICA
+    ica = exclude_artifacts(ica)  # Exclude artifact components
+    raw = apply_ica(ica, raw)  # Apply ICA
+    validate_results(raw)  # Plot cleaned data
 
 if __name__ == "__main__":
-    raw  = load_and_plot_raw_eeg()
-    plot_psd(raw)
-
-
-print(raw.info['ch_names'])    # Print all channel names (e.g., EEG, EOG, triggers)
-
-# Pick only EEG, EOG, and stimulus (trigger) channels for further analysis
-raw.pick(["eeg", "eog", "stim"])
-raw = load_and_plot_raw_eeg()
-                # Ensure the selected data is loaded into memory
-
-
-
-
-def filter_and_find_events(raw, l_freq=0.3, h_freq=40):
-    """
-    Apply a bandpass filter and find events in the EEG data.
-    
-    Parameters:
-        raw (mne.io.Raw): The raw EEG object.
-        l_freq (float): Low cutoff frequency.
-        h_freq (float): High cutoff frequency.
-    
-    Returns:
-        raw (mne.io.Raw): The filtered EEG object.
-        events (ndarray): The array of events.
-        event_id (dict): Dictionary mapping event names to codes.
-    """
-    # Apply bandpass filter to remove slow drifts and high-frequency noise
-    raw.filter(l_freq, h_freq)
-    
-    # Find events in the stimulus channel
-    events = mne.find_events(raw)
-
-    # Define the mapping from event names to event codes
-    event_id = {
-        "REF_LIGHT": 11,
-        "REF_DARK": 12,
-        "RAND_LIGHT": 13,
-        "RAND_DARK": 14
-    }
-
-    print(f"Found {len(events)} events.")
-    return raw, events, event_id
-
-def create_epochs_and_plot_average(raw, events, event_id):
-    """
-    Create epochs, plot the average evoked response, and handle SSP projectors.
-
-    Parameters:
-        raw (mne.io.Raw): Filtered raw EEG data.
-        events (ndarray): Events found in the raw data.
-        event_id (dict): Mapping of event names to event codes.
-
-    Returns:
-        epochs (mne.Epochs): The epoched data.
-        ssp_projectors (list): The list of SSP projectors from raw.info.
-    """
-    # Epoch the data
-    epochs = mne.Epochs(raw, events, event_id=event_id, preload=True)
-
-    # Plot evoked response for all channels with consistent axis limits
-    plot_kwargs = dict(picks="all", ylim=dict(eeg=(-10, 10), eog=(-5, 15)))
-    fig = epochs.average().plot(**plot_kwargs)
-    fig.set_size_inches(6, 6)
-    plt.show()
-
-    # Save and remove SSP projectors
-    ssp_projectors = raw.info["projs"]
-    raw.del_proj()
-
-    return epochs, ssp_projectors
-
-def extract_and_plot_eog_epochs(raw, baseline=(-0.5, -0.2)):
-    """
-    Extracts EOG epochs and plots EOG activity.
-
-    Parameters:
-        raw (mne.io.Raw): The preprocessed EEG data.
-        baseline (tuple): Baseline correction interval (in seconds).
-
-    Returns:
-        eog_epochs (mne.Epochs): The epochs time-locked to EOG events.
-    """
-    # Create EOG epochs (detects blinks/saccades)
-    eog_epochs = mne.preprocessing.create_eog_epochs(raw, baseline=baseline)
-    
-    # Plot time x trial image of EOG activity
-    eog_epochs.plot_image(combine="mean", title="EOG Epochs Image")
-
-    # Plot average EOG response with topography
-    eog_epochs.average().plot_joint(title="EOG Average Response")
-
-    return eog_epochs
+    run_ica_pipeline()
