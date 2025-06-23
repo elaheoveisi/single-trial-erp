@@ -1,71 +1,73 @@
-import matplotlib
-matplotlib.use('TkAgg')
-import matplotlib.pyplot as plt
-from time import time
 import mne
-from mne.channels import make_standard_montage
+import matplotlib.pyplot as plt
 from mne.preprocessing import ICA
+import numpy as np
 
-def load_raw_data(raw_fname=r"C:\Users\elahe\Downloads\sub-001_task-lumfront_eeg.bdf", tmin=0, tmax=60):
-    """Load and crop raw EEG data."""
-    try:
-        raw = mne.io.read_raw_bdf(raw_fname, preload=True).crop(tmin, tmax)
-        return raw
-    except FileNotFoundError:
-        raise FileNotFoundError(f"Could not find file: {raw_fname}")
-
-def set_montage(raw):
-    """Apply a standard montage for channel locations, ignoring missing channels."""
-    montage = make_standard_montage('standard_1005')  # 10-10 system
-    raw.set_montage(montage, on_missing='warn')  # Warn about unmapped channels
-    return raw
-
-def pick_eeg_channels(raw):
-    """Select only EEG channels, excluding EXG."""
-    eeg_channels = [ch for ch in raw.ch_names if not ch.startswith('EXG')]
-    if not eeg_channels:
-        raise ValueError("No EEG channels found in the data.")
-    raw.pick(eeg_channels)
-    return raw
-
-def preprocess_data(raw):
-    """Preprocess raw data with bandpass filter."""
+def load_and_preprocess(raw_fname=r"C:\Users\elahe\Downloads\sub-001_task-lumfront_eeg.bdf", tmin=0, tmax=60):
+    """Load, crop, set montage, filter EEG data."""
+    raw = mne.io.read_raw_bdf(raw_fname, preload=True).crop(tmin, tmax)
+    montage = mne.channels.make_standard_montage('standard_1005')
+    raw.set_montage(montage, on_missing='ignore')
+    raw.pick([ch for ch in raw.ch_names if not ch.startswith('EXG')])
     raw.filter(l_freq=1.0, h_freq=60.0)
     return raw
 
-def run_ica(raw, reject=None, n_components=20):
-    """Fit ICA on raw data and plot components."""
+def check_events(raw):
+    """Debug: Print channel names (events not used for whole-data epoching)."""
+    print("Channel names:", raw.ch_names)
+    return None  # Events not needed for whole-data epoching
+
+def run_ica(raw, n_components=10):
+    """Fit ICA, plot components, and apply artifact removal."""
     ica = ICA(n_components=n_components, method="picard", random_state=0)
-    t0 = time()
-    ica.fit(raw, reject=reject)
-    fit_time = time() - t0
-    title = f"ICA decomposition using picard (took {fit_time:.1f}s)"
-    ica.plot_components(title=title, inst=raw, show=True)
-    return ica
-
-def exclude_artifacts(ica):
-    """Manually exclude artifact-related components."""
-    ica.exclude = [0, 3, 5]  # Replace with indices of artifact components after inspection
-    return ica
-
-def apply_ica(ica, raw):
-    """Apply ICA to remove artifacts."""
+    ica.fit(raw)
+    ica.plot_components(inst=raw)
+    plt.show()
+    ica.exclude = [0, 1]  # Adjust after inspecting components
     raw = ica.apply(raw)
     return raw
 
-def validate_results(raw):
-    raw.plot(scalings='auto', n_channels=64, duration=20, show=True)  # Show 10 channels, 20 seconds
+def create_epochs_whole_data(raw, window_size=2.0, overlap=0.5):
+    """Create epochs across the entire raw data with a sliding window."""
+    # Convert window size and overlap from seconds to samples
+    sfreq = raw.info['sfreq']  # Sampling frequency (e.g., 512 Hz)
+    window_samples = int(window_size * sfreq)
+    step_samples = int((window_size - overlap) * sfreq)
+    
+    # Get total number of samples
+    n_samples = len(raw.times)
+    epochs_data = []
+    
+    # Create sliding windows
+    for start in range(0, n_samples - window_samples + 1, step_samples):
+        end = start + window_samples
+        if end <= n_samples:
+            epoch = raw.get_data(start=start, stop=end)
+            epochs_data.append(epoch)
+    
+    # Convert to MNE Epochs array (n_epochs, n_channels, n_times)
+    epochs_data = np.array(epochs_data)
+    info = raw.info
+    epochs = mne.EpochsArray(epochs_data, info, tmin=0.0)
+    print("Epochs shape:", epochs.get_data().shape)
+    return epochs
 
-def run_ica_pipeline():
-    """Run the complete ICA preprocessing pipeline."""
-    raw = load_raw_data()
-    raw = set_montage(raw)  # Apply montage
-    raw = pick_eeg_channels(raw)  # Select EEG channels
-    raw = preprocess_data(raw)  # Filter data
-    ica = run_ica(raw)  # Fit and plot ICA
-    ica = exclude_artifacts(ica)  # Exclude artifact components
-    raw = apply_ica(ica, raw)  # Apply ICA
-    validate_results(raw)  # Plot cleaned data
+def visualize(raw, epochs):
+    """Plot cleaned raw data and average of all epochs."""
+    raw.plot(scalings='auto')
+    plt.show()
+    evoked = epochs.average()
+    print("Evoked data shape:", evoked.data.shape)
+    evoked.plot(scalings=dict(eeg=20e-6))
+    plt.title("Average of All Epochs")
+    plt.show()
+
+def main():
+    raw = load_and_preprocess()
+    check_events(raw)  # Kept for debugging channel info
+    raw = run_ica(raw)
+    epochs = create_epochs_whole_data(raw, window_size=2.0, overlap=0.5)
+    visualize(raw, epochs)
 
 if __name__ == "__main__":
-    run_ica_pipeline()
+    main()

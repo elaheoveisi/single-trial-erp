@@ -15,14 +15,13 @@ def load_raw_data(raw_fname=r"C:\Users\elahe\Downloads\sub-001_task-lumfront_eeg
 def set_montage(raw):
     """Apply a standard montage for channel locations, ignoring missing channels."""
     montage = make_standard_montage('standard_1005')  # 10-10 system for 72 channels
-    raw.set_montage(montage, on_missing='ignore')  # Ignore unmapped EXG channels
+    raw.set_montage(montage, on_missing='ignore')  # Ignore the unmatched channels
     return raw
 
 def pick_eeg_channels(raw):
     """Select only EEG channels, excluding EXG."""
     raw.pick([ch for ch in raw.ch_names if not ch.startswith('EXG')])
     return raw
-
 
 # Step 2: Preprocess the data
 def preprocess_data(raw):
@@ -45,34 +44,18 @@ def visualize_components(ica, raw):
     ica.plot_components(inst=raw)
 
 def exclude_artifacts(ica):
-    # Manually exclude specific components (e.g., ICA001 and ICA014)
-    ica.exclude = [0, 3]  # Replace with the indices of artifact-related components
+    # Manually exclude specific components 
+    ica.exclude = [0, 3]  
 
 def apply_ica(ica, raw):
     ica.apply(raw)
     return raw
 
-def create_epochs(raw, event_id=None, tmin=-0.2, tmax=0.5, baseline=(None, 0)):
-    """Extract events and create epochs from raw data."""
-    # Find events (assuming events are stored in a trigger channel or annotations)
-    events, event_id = mne.events_from_annotations(raw, event_id=event_id)
-    if len(events) == 0:
-        raise ValueError("No events found in the data. Check trigger channel or event codes.")
-    
-    # Create epochs
-    epochs = mne.preprocessing.Epochs(
-        epochs = mne.Epochs(
-            raw,
-            events,
-            event_id=event_id,
-            tmin=tmin,
-            tmax=raw,
-            baseline=baseline,
-            preload=True,
-            reject=None
-        )
-    )
-    return epochs
+def create_epochs(raw, duration=0.7, baseline=(None, 0)):
+    """Create fixed-length epochs from raw data."""
+    return mne.make_fixed_length_epochs(raw, duration=duration, baseline=baseline, preload=True)
+
+
 
 def validate_results(raw, epochs=None):
     """Visualize cleaned raw data and optionally averaged ERP."""
@@ -84,13 +67,16 @@ def validate_results(raw, epochs=None):
 def run_ica_pipeline():
     raw = load_raw_data()
     raw = set_montage(raw)             
-    raw = pick_eeg_channels(raw)       
+    pick_eeg_channels(raw)      
     raw = preprocess_data(raw)
+    
     ica = run_ica(raw)
     visualize_components(ica, raw)
     exclude_artifacts(ica)             
     raw = apply_ica(ica, raw)
-    validate_results(raw, None)       
+    
+    epochs = create_epochs(raw, tmin=-0.2, tmax=0.5, baseline=(None, 0))
+    validate_results(epochs, None)
 
 # Run the pipeline
 run_ica_pipeline()
