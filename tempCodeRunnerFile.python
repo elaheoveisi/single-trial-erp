@@ -1,73 +1,30 @@
-import mne
 import matplotlib.pyplot as plt
-from mne.preprocessing import ICA
-import numpy as np
 
-def load_and_preprocess(raw_fname=r"C:\Users\elahe\Downloads\sub-001_task-lumfront_eeg.bdf", tmin=0, tmax=60):
-    """Load, crop, set montage, filter EEG data."""
-    raw = mne.io.read_raw_bdf(raw_fname, preload=True).crop(tmin, tmax)
-    montage = mne.channels.make_standard_montage('standard_1005')
-    raw.set_montage(montage, on_missing='ignore')
-    raw.pick([ch for ch in raw.ch_names if not ch.startswith('EXG')])
-    raw.filter(l_freq=1.0, h_freq=60.0)
-    return raw
+# Data for the pie chart
+labels = ['Aviation', 'Nuclear Power Plant', 'Driving', 'Military', 'Robotics', 
+          'Firefighting Simulation', 'Minecraft Simulation', 'Search and Rescue', 
+          'Warfighters in Operations']
+values = [17, 6, 4, 5, 3, 4, 3, 2, 1]
+colors = ['#4E79A7', '#F28E2B', '#E15759', '#76B7B2', '#59A14F', 
+          '#EDC948', '#B07AA1', '#FF9DA7', '#9C755F', '#BAB0AC']
 
-def check_events(raw):
-    """Debug: Print channel names (events not used for whole-data epoching)."""
-    print("Channel names:", raw.ch_names)
-    return None  # Events not needed for whole-data epoching
+explode = [0.1] + [0] * 8  # Slightly explode Aviation for emphasis
 
-def run_ica(raw, n_components=10):
-    """Fit ICA, plot components, and apply artifact removal."""
-    ica = ICA(n_components=n_components, method="picard", random_state=0)
-    ica.fit(raw)
-    ica.plot_components(inst=raw)
-    plt.show()
-    ica.exclude = [0, 1]  # Adjust after inspecting components
-    raw = ica.apply(raw)
-    return raw
+# Create pie chart
+plt.figure(figsize=(10, 10))  # Large size for clarity
+plt.pie(values, colors=colors, explode=explode, startangle=45)
 
-def create_epochs_whole_data(raw, window_size=2.0, overlap=0.5):
-    """Create epochs across the entire raw data with a sliding window."""
-    # Convert window size and overlap from seconds to samples
-    sfreq = raw.info['sfreq']  # Sampling frequency (e.g., 512 Hz)
-    window_samples = int(window_size * sfreq)
-    step_samples = int((window_size - overlap) * sfreq)
-    
-    # Get total number of samples
-    n_samples = len(raw.times)
-    epochs_data = []
-    
-    # Create sliding windows
-    for start in range(0, n_samples - window_samples + 1, step_samples):
-        end = start + window_samples
-        if end <= n_samples:
-            epoch = raw.get_data(start=start, stop=end)
-            epochs_data.append(epoch)
-    
-    # Convert to MNE Epochs array (n_epochs, n_channels, n_times)
-    epochs_data = np.array(epochs_data)
-    info = raw.info
-    epochs = mne.EpochsArray(epochs_data, info, tmin=0.0)
-    print("Epochs shape:", epochs.get_data().shape)
-    return epochs
+# Equal aspect ratio ensures the pie chart is circular
+plt.axis('equal')
 
-def visualize(raw, epochs):
-    """Plot cleaned raw data and average of all epochs."""
-    raw.plot(scalings='auto')
-    plt.show()
-    evoked = epochs.average()
-    print("Evoked data shape:", evoked.data.shape)
-    evoked.plot(scalings=dict(eeg=20e-6))
-    plt.title("Average of All Epochs")
-    plt.show()
+# Add a title
+plt.title('Distribution of Fields of Study in TSA Research', fontsize=18, pad=20)
 
-def main():
-    raw = load_and_preprocess()
-    check_events(raw)  # Kept for debugging channel info
-    raw = run_ica(raw)
-    epochs = create_epochs_whole_data(raw, window_size=2.0, overlap=0.5)
-    visualize(raw, epochs)
+# Add legend outside the pie chart
+plt.legend(labels, title="Fields of Study", loc="center left", bbox_to_anchor=(1, 0.5), fontsize=18)
 
-if __name__ == "__main__":
-    main()
+# Adjust layout to prevent legend overlap
+plt.tight_layout()
+
+# Show the plot
+plt.show()
