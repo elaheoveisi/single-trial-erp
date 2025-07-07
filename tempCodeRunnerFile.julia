@@ -1,0 +1,51 @@
+import matplotlib.pyplot as plt
+
+mind_map = {
+    "TSA Dynamics": [
+        "Analyzing communication quality",
+        "Cognitive workload via EEG",
+        "Attention alignment via eye-tracking"
+    ],
+    "Multi-Modal Assessment": [
+        "Integrating physiological data",
+        "Communication analysis with LLMs",
+        "Task performance metrics for TSA scores"
+    ],
+    "LLMs for Communication": [
+        "Evaluating team communication",
+        "Assessing correctness, sufficiency, relevance"
+    ],
+    "Physiological Indicators": [
+        "Measuring cognitive load",
+        "Eye-tracking metrics like gaze fixation"
+    ],
+    "Predicting TSA Breakdowns": [
+        "Real-time signal analysis",
+        "Identifying early warning signs"
+    ],
+    "Human-AI Teaming": [
+        "AI tools complementing human strengths",
+        "Improving collaboration and situational awareness"
+    ],
+    "Broader Applications": [
+        "Scalable framework for team coordination",
+        "Enhancing training and operational safety"
+    ]
+}
+
+fig, ax = plt.subplots(figsize=(16, 10))
+ax.axis('off')
+y = 1.0
+x_offset = 0.05
+fontsize_main = 18
+fontsize_sub = 14
+
+for i, (main_topic, subtopics) in enumerate(mind_map.items()):
+    ax.text(x_offset, y, f'• {main_topic}', fontsize=fontsize_main, weight='bold', color='black')
+    for sub in subtopics:
+        y -= 0.04
+        ax.text(x_offset + 0.03, y, f'- {sub}', fontsize=fontsize_sub, color='dimgray')
+    y -= 0.06  # space between main sections
+
+plt.tight_layout()
+plt.show()
