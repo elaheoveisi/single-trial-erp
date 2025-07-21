@@ -23,7 +23,7 @@ def load_and_preprocess(raw_fname):
 # === Combined step: epoch + autoreject + ICA ===
 def autoreject_and_ica(raw):
     epochs = mne.make_fixed_length_epochs(raw, duration=2.0, preload=True)
-    ar = autoreject.AutoReject(n_interpolate=[1, 2, 3, 4], random_state=11,
+    ar = autoreject.AutoReject(n_interpolate=[1, 2, 3, 4], random_state=0,
                            n_jobs=1, verbose=True)
     ar.fit(epochs)
     epochs_clean, reject_log = ar.fit_transform(epochs, return_log=True)
