@@ -2,6 +2,8 @@ import mne
 import matplotlib.pyplot as plt
 from mne.preprocessing import ICA
 from autoreject import AutoReject
+import os
+import autoreject
 
 # === File map ===
 file_map = {
@@ -21,10 +23,12 @@ def load_and_preprocess(raw_fname):
 # === Combined step: epoch + autoreject + ICA ===
 def autoreject_and_ica(raw):
     epochs = mne.make_fixed_length_epochs(raw, duration=2.0, preload=True)
-    ar = AutoReject()
+    ar = autoreject.AutoReject(n_interpolate=[1, 2, 3, 4], random_state=11,
+                           n_jobs=1, verbose=True)
+    ar.fit(epochs)
     epochs_clean, reject_log = ar.fit_transform(epochs, return_log=True)
 
-    ica = ICA(n_components=20, method='picard', random_state=0)
+    ica = ICA(n_components=64, method='picard', random_state=0)
     ica.fit(epochs_clean)
     ica.plot_components(inst=raw)
     plt.show()
@@ -41,7 +45,7 @@ def visualize(raw, epochs_clean):
     evoked = epochs_clean.average()
     print("Evoked data shape:", evoked.data.shape)
     evoked._data *= 1e6  # Convert to microvolts
-    evoked.plot(scalings=dict(eeg=20), time_unit='s')
+    evoked.plot(scalings=dict(eeg=64), time_unit='s')
     plt.show()
 
 # === Final wrapper in your required format ===
