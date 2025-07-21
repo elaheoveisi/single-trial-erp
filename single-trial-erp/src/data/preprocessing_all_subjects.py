@@ -73,7 +73,7 @@ def clean_eeg(subject_id, task_id):
 
 # === Run all subjects and tasks ===
 if __name__ == "__main__":
-    subjects = [1]  # Only subject 1 is defined in file_map
+    subjects = [1]  
     tasks = ["lumfront", "lumperp"]
 
     save_dir = r"C:\Users\elahe\Documents\EEG_Cleaned"
