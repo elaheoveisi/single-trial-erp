@@ -2,6 +2,8 @@ import mne
 import matplotlib.pyplot as plt
 from mne.preprocessing import ICA
 from autoreject import AutoReject
+import os
+import autoreject
 
 # === File map ===
 file_map = {
@@ -21,7 +23,9 @@ def load_and_preprocess(raw_fname):
 # === Combined step: epoch + autoreject + ICA ===
 def autoreject_and_ica(raw):
     epochs = mne.make_fixed_length_epochs(raw, duration=2.0, preload=True)
-    ar = AutoReject()
+    ar = autoreject.AutoReject(n_interpolate=[1, 2, 3, 4], random_state=0,
+                           n_jobs=1, verbose=True)
+    ar.fit(epochs)
     epochs_clean, reject_log = ar.fit_transform(epochs, return_log=True)
 
     ica = ICA(n_components=64, method='picard', random_state=0)
