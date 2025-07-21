@@ -24,7 +24,7 @@ def autoreject_and_ica(raw):
     ar = AutoReject()
     epochs_clean, reject_log = ar.fit_transform(epochs, return_log=True)
 
-    ica = ICA(n_components=20, method='picard', random_state=0)
+    ica = ICA(n_components=64, method='picard', random_state=0)
     ica.fit(epochs_clean)
     ica.plot_components(inst=raw)
     plt.show()
@@ -41,7 +41,7 @@ def visualize(raw, epochs_clean):
     evoked = epochs_clean.average()
     print("Evoked data shape:", evoked.data.shape)
     evoked._data *= 1e6  # Convert to microvolts
-    evoked.plot(scalings=dict(eeg=20), time_unit='s')
+    evoked.plot(scalings=dict(eeg=64), time_unit='s')
     plt.show()
 
 # === Final wrapper in your required format ===
