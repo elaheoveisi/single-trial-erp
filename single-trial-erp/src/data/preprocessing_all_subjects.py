@@ -4,7 +4,6 @@ from mne.preprocessing import ICA
 from autoreject import AutoReject
 import os
 import autoreject
-import matplotlib.pyplot as plt
 import openneuro
 
 # === File map ===
@@ -93,14 +92,11 @@ def autoreject_and_ica(raw, epochs):
     ar = autoreject.AutoReject(n_interpolate=[1, 2, 3, 4], random_state=11,
                                n_jobs=1, verbose=True)
     ar.fit(epochs)
-    epochs_clean, reject_log = ar.transform(epochs, return_log=True)
+    epochs_ar, reject_log = ar.transform(epochs, return_log=True)
 
-    # === Plot bad epochs if any ===
-    if len(reject_log.bad_epochs) > 0:
-        print(f"{len(reject_log.bad_epochs)} bad epochs found.")
-        epochs[reject_log.bad_epochs].plot(scalings=dict(eeg=100e-6), title="Rejected Epochs")
-    else:
-        print("No bad epochs found.")
+    #  bad epochs 
+    epochs[reject_log.bad_epochs].plot(scalings=dict(eeg=100e-6))
+    reject_log.plot('horizontal')
 
     # === ICA decomposition ===
     ica = ICA(n_components=64, method='picard', random_state=0)
@@ -145,7 +141,7 @@ def visualize(raw, epochs_clean):
     evoked = epochs_clean.average()
     print("Evoked data shape:", evoked.data.shape)
     evoked._data *= 1e6  # Convert to microvolts
-    evoked.plot(scalings=dict(eeg=64), time_unit='s')
+    evoked.plot(scalings=dict(eeg=20), time_unit='s')
     plt.show()
 
 
