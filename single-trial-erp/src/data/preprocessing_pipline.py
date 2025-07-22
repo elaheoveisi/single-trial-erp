@@ -6,7 +6,7 @@ import os
 import autoreject
 import openneuro
 
-# === File Map ===
+#  File Map 
 dataset = 'ds005841'
 subject_ids = ['001', '002']
 tasks = ['lumfront', 'lumperp']
@@ -27,7 +27,7 @@ for subj in subject_ids:
 
 openneuro.download(dataset=dataset, target_dir=target_dir, include=include_paths)
 
-# === EEG Load + Preprocess ===
+#  EEG Load + Preprocess
 def load_and_preprocess(filepath):
     raw = mne.io.read_raw_bdf(filepath, preload=True)
     montage = mne.channels.make_standard_montage('biosemi64')
@@ -37,7 +37,7 @@ def load_and_preprocess(filepath):
     epochs = mne.make_fixed_length_epochs(raw, duration=2.0, preload=True)
     return raw, epochs
 
-# === Clean EEG ===
+#  Clean EEG 
 def clean_eeg(subject_id, task_id, save_plot_dir=None):
     filepath = file_map.get((subject_id, task_id))
     if not filepath:
@@ -98,7 +98,7 @@ def clean_eeg(subject_id, task_id, save_plot_dir=None):
 
     return raw_clean, epochs_clean
 
-# === Run All ===
+#  Run All 
 if __name__ == "__main__":
     subjects = [1, 2]
     tasks = ['lumfront', 'lumperp']
