@@ -4,31 +4,12 @@ from mne.preprocessing import ICA
 from autoreject import AutoReject
 import os
 import autoreject
-import matplotlib.pyplot as plt
-import openneuro
 
 # === File map ===
-dataset = 'ds005841'   # The id code on OpenNeuro for this example dataset
-subject_id = '001'    
-tasks = ['lumfront', 'lumperp']
-
-target_dir = os.path.join(
-    os.path.dirname(autoreject.__file__), '..', 'examples', dataset)
-os.makedirs(target_dir, exist_ok=True)
-
-# === Download only the needed files for each task ===
-include_paths = [f'sub-{subject_id}/eeg/sub-{subject_id}_task-{task}_eeg.bdf' for task in tasks]
-
-openneuro.download(dataset=dataset, target_dir=target_dir, include=include_paths)
-
-#file_map
-file_map = {}
-for task in tasks:
-    bdf_path = os.path.join(target_dir, f"sub-{subject_id}", "eeg", f"sub-{subject_id}_task-{task}_eeg.bdf")
-    file_map[(int(subject_id), task)] = bdf_path
-
-
-
+file_map = {
+    (1, "lumfront"): r"C:\Users\elahe\Downloads\sub-001_task-lumfront_eeg (2).bdf",
+    (1, "lumperp"):  r"C:\Users\elahe\Downloads\sub-001_task-lumperp_eeg.bdf",
+    }
 
 # === Load and preprocess raw EEG ===
 def load_and_preprocess(raw_fname):
@@ -46,7 +27,7 @@ def load_and_preprocess(raw_fname):
         Preprocessed raw EEG data with montage set and filtering applied.
     """
     raw = mne.io.read_raw_bdf(raw_fname, preload=True)
-    montage = mne.channels.make_standard_montage('biosemi64')
+    montage = mne.channels.make_standard_montage('standard_1005')
     raw.set_montage(montage, on_missing='ignore')
     raw.pick([ch for ch in raw.ch_names if not ch.startswith('EXG')])
     raw.filter(l_freq=1.0, h_freq=60.0)
