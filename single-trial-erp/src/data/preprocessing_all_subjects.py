@@ -7,21 +7,34 @@ import autoreject
 import openneuro
 
 # File download and file map 
+import os
+import autoreject
+import openneuro
+
+# Files
 dataset = 'ds005841'
-subject_id = '001'
+subject_ids = ['001', '002']
 tasks = ['lumfront', 'lumperp']
 
 target_dir = os.path.join(
     os.path.dirname(autoreject.__file__), '..', 'examples', dataset)
 os.makedirs(target_dir, exist_ok=True)
 
-include_paths = [f'sub-{subject_id}/eeg/sub-{subject_id}_task-{task}_eeg.bdf' for task in tasks]
-openneuro.download(dataset=dataset, target_dir=target_dir, include=include_paths)
-
+#  Build include paths 
+include_paths = []
 file_map = {}
-for task in tasks:
-    bdf_path = os.path.join(target_dir, f"sub-{subject_id}", "eeg", f"sub-{subject_id}_task-{task}_eeg.bdf")
-    file_map[(int(subject_id), task)] = bdf_path
+
+for subj in subject_ids:
+    for task in tasks:
+        path = f'sub-{subj}/eeg/sub-{subj}_task-{task}_eeg.bdf'
+        include_paths.append(path)
+
+        # Also build the local path for file_map
+        full_path = os.path.join(target_dir, f"sub-{subj}", "eeg", f"sub-{subj}_task-{task}_eeg.bdf")
+        file_map[(int(subj), task)] = full_path
+
+# Download from OpenNeuro 
+openneuro.download(dataset=dataset, target_dir=target_dir, include=include_paths)
 
 #  EEG cleaning function 
 def clean_eeg(subject_id, task_id):
@@ -97,4 +110,6 @@ if __name__ == "__main__":
             save_path = os.path.join(save_dir, filename)
             raw_clean.save(save_path, overwrite=True)
             print(f"Saved cleaned data to: {save_path}")
+
+
 
