@@ -6,10 +6,7 @@ import os
 import autoreject
 import openneuro
 
-# File download and file map 
-import os
-import autoreject
-import openneuro
+
 
 # Files
 dataset = 'ds005841'
