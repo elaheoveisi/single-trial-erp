@@ -7,7 +7,7 @@ import autoreject
 import openneuro
 
 # === File map ===
-dataset = 'ds005841'   # The id code on OpenNeuro for this example dataset
+dataset = 'ds005841'   # The ID
 subject_id = '001'    
 tasks = ['lumfront', 'lumperp']
 
