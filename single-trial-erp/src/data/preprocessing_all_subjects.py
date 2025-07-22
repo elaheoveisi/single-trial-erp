@@ -43,52 +43,84 @@ def load_and_preprocess(raw_fname):
     Returns
     -------
     raw : mne.io.Raw
-        Preprocessed raw EEG data with montage set and filtering applied.
+        Preprocessed raw EEG data.
+    epochs : mne.Epochs
+        Fixed-length epochs created from the raw EEG.
     """
     raw = mne.io.read_raw_bdf(raw_fname, preload=True)
+    
+    # Set standard BioSemi 64 montage
     montage = mne.channels.make_standard_montage('biosemi64')
     raw.set_montage(montage, on_missing='ignore')
-    raw.pick([ch for ch in raw.ch_names if not ch.startswith('EXG')])
-    raw.filter(l_freq=1.0, h_freq=60.0)
-    return raw
+    
+    # Keep only EEG channels (drop EXG, status, etc.)
+    raw.pick([ch for ch in raw.ch_names if ch in montage.ch_names])
 
-# === Combined step: epoch + autoreject + ICA ===
-def autoreject_and_ica(raw):
+    # Apply bandpass filter
+    raw.filter(l_freq=1.0, h_freq=60.0)
+
+    # Create fixed-length epochs after filtering
+    epochs = mne.make_fixed_length_epochs(raw, duration=2.0, preload=True)
+
+    return raw, epochs
+
+
+def autoreject_and_ica(raw, epochs):
     """
-    Apply autoreject and ICA to the raw EEG data.
+    Apply autoreject and ICA to the raw EEG data and epochs.
 
     Parameters
     ----------
     raw : mne.io.Raw
         The preprocessed raw EEG data.
+    epochs : mne.Epochs
+        Epochs created from raw EEG.
 
     Returns
     -------
     raw_clean : mne.io.Raw
         ICA-cleaned raw EEG data.
     epochs : mne.Epochs
-        Original epochs created from raw data.
+        Original epochs.
     epochs_clean : mne.Epochs
-        Cleaned epochs after applying autoreject.
+        Cleaned epochs after autoreject and ICA.
     reject_log : autoreject.RejectLog
         Log of rejected epochs.
     ica : mne.preprocessing.ICA
         Fitted ICA object.
     """
-    epochs = mne.make_fixed_length_epochs(raw, duration=2.0, preload=True)
+    # === Apply AutoReject ===
     ar = autoreject.AutoReject(n_interpolate=[1, 2, 3, 4], random_state=11,
                                n_jobs=1, verbose=True)
     ar.fit(epochs)
-    epochs_clean, reject_log = ar.fit_transform(epochs, return_log=True)
+    epochs_clean, reject_log = ar.transform(epochs, return_log=True)
 
+    # === Plot bad epochs if any ===
+    if len(reject_log.bad_epochs) > 0:
+        print(f"{len(reject_log.bad_epochs)} bad epochs found.")
+        epochs[reject_log.bad_epochs].plot(scalings=dict(eeg=100e-6), title="Rejected Epochs")
+    else:
+        print("No bad epochs found.")
+
+    # === ICA decomposition ===
     ica = ICA(n_components=64, method='picard', random_state=0)
     ica.fit(epochs_clean)
+
+    # === Plot ICA components ===
     ica.plot_components(inst=raw)
     plt.show()
-    ica.exclude =[]
+
+    # === Overlay ICA on averaged epochs ===
+    ica.plot_overlay(epochs.average(), exclude=ica.exclude)
+    plt.show()
+
+    # === Apply ICA to raw and epochs ===
+    ica.exclude = []  # (you can set specific components if needed)
     raw_clean = ica.apply(raw.copy())
+    ica.apply(epochs, exclude=ica.exclude)
 
     return raw_clean, epochs, epochs_clean, reject_log, ica
+
 
 
 # === Visualization of raw + evoked plots ===
@@ -141,13 +173,17 @@ def clean_eeg(subject_id, task_id):
         raise ValueError(f"No file found for subject {subject_id}, task {task_id}")
 
     print(f"Processing: {filepath}")
-    raw = load_and_preprocess(filepath)
+    
+    # Load and preprocess EEG → returns raw and epochs
+    raw, epochs = load_and_preprocess(filepath)
 
-    raw_clean, epochs, epochs_clean, reject_log, ica = autoreject_and_ica(raw)
+    # Run autoreject and ICA
+    raw_clean, epochs, epochs_clean, reject_log, ica = autoreject_and_ica(raw, epochs)
 
+    # Visualize results
     visualize(raw_clean, epochs_clean)
 
-    # Plot ICA overlay
+    #Plot ICA overlay
     ica.plot_overlay(raw, exclude=ica.exclude)
     plt.show()
 
@@ -160,6 +196,7 @@ def clean_eeg(subject_id, task_id):
         plt.show()
 
     return raw_clean, epochs_clean
+
 
 
 # === Run all subjects and tasks ===
