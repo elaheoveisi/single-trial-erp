@@ -177,7 +177,7 @@ def clean_eeg(subject_id, task_id):
     raw_clean, epochs, epochs_clean, reject_log, ica = autoreject_and_ica(raw, epochs)
 
     # Visualize results
-    visualize(raw_clean, epochs_clean)
+    visualize(raw_clean, epochs_ar)
 
     #Plot ICA overlay
     ica.plot_overlay(raw, exclude=ica.exclude)
@@ -211,4 +211,4 @@ if __name__ == "__main__":
             filename = f"sub-{subject_id}_task-{task_id}_cleaned_raw.fif"
             save_path = os.path.join(save_dir, filename)
             raw_clean.save(save_path, overwrite=True)
-            print(f"Saved cleaned data to: {save_path}")
+            print(f"Saved cleaned data to: {save_path}") 
