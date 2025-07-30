@@ -1,9 +1,12 @@
 # Dataset info
 dataset: 'ds005841'
-subject_ids: ['001', '002']
+subjects: ['001', '002']
 tasks: ['lumfront', 'lumperp']
 
+# Save folders
+save_dir: outputs
+save_plot_dir: data/plots
+
 # Data paths
-target_dir: 'data/raw'
-processed_dir: 'data/processed'
-save_plot_dir: 'data/plots'
+target_dir: data/raw
+processed_dir: data/processed

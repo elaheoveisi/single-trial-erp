@@ -18,7 +18,7 @@ def load_eeg_data(filepath):
 
 
 #  Clean EEG
-def clean_eeg(subject_id, task_id, config=None):
+def clean_eeg(subject_id, task_id, config= None, save_dir= None):
     filepath = f"{config['target_dir']}/sub-{subject_id}/eeg/sub-{subject_id}_task-{task_id}_eeg.bdf"
     if not filepath:
         raise ValueError(f"No file found for subject {subject_id}, task {task_id}")
@@ -29,24 +29,37 @@ def clean_eeg(subject_id, task_id, config=None):
     ar = AutoReject(n_interpolate=[1, 2, 3, 4], random_state=11, n_jobs=1, verbose=True)
     ar.fit(epochs)
     epochs_clean, reject_log = ar.transform(epochs, return_log=True)
-
+    
     if len(reject_log.bad_epochs) > 0:
-        print(f"{len(reject_log.bad_epochs)} bad epochs found.")
-        fig_bad = epochs[reject_log.bad_epochs].plot(
-            scalings=dict(eeg=100e-6), show=False
-        )
-        fig_bad.suptitle(f"Bad Epochs - Subject {subject_id} Task {task_id}")
-        if config["save_plot_dir"]:
-            fig_bad.savefig(
-                os.path.join(
-                    config["save_plot_dir"],
-                    f"/sub-{subject_id}_task-{task_id}_bad_epochs.png",
-                )
-            )
-        plt.show()
-        reject_log.plot("horizontal")
+       print(f"{len(reject_log.bad_epochs)} bad epochs found.")
 
-    ica = ICA(n_components=64, method="picard", random_state=0)
+    fig_bad = epochs[reject_log.bad_epochs].plot(
+        scalings=dict(eeg=100e-6), show=False
+    )
+    fig_bad.suptitle(f"Bad Epochs - Subject {subject_id} Task {task_id}")
+
+    # Get save directory and make sure it exists
+    save_dir = config.get("save_plot_dir", "outputs")
+    os.makedirs(save_dir, exist_ok=True)
+
+    # Save the figure safely with PermissionError handling
+    fig_path = os.path.join(
+        save_dir,
+        f"sub-{subject_id}_task-{task_id}_bad_epochs.png"
+    )
+    try:
+        fig_bad.savefig(fig_path)
+        print(f"✅ Saved bad epoch plot to {fig_path}")
+    except PermissionError:
+        print(f"❌ Permission denied: Cannot save plot to '{fig_path}'. Please check folder permissions.")
+
+    # Optionally show and plot rejection log
+    plt.show()
+    reject_log.plot("horizontal")
+
+
+
+    ica = ICA(n_components=20, method="picard", random_state=0)
     ica.fit(epochs_clean)
     ica.plot_components(inst=raw)
     plt.suptitle(f"ICA Components - Subject {subject_id} Task {task_id}")
@@ -98,11 +111,11 @@ def clean_eeg(subject_id, task_id, config=None):
 
 
 # Preprocess all the subjects and tasks
-def preprocess_all_subjects_tasks(subjects, tasks, config=None):
+def preprocess_all_subjects_tasks(subjects, tasks, config= None, save_dir= None):
     for subject_id in subjects:
         for task_id in tasks:
             raw_clean, epochs_clean = clean_eeg(
-                subject_id, task_id, save_plot_dir=config["save_plot_dir"]
+                subject_id, task_id, config=config
             )
             path = f"{config['processed_dir']}/sub-{subject_id}_task-{task_id}_cleaned_raw.fif"
             raw_clean.save(path, overwrite=True)
