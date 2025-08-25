@@ -53,7 +53,6 @@ def clean_eeg(subject_id, task_id, config= None, save_dir= None):
     except PermissionError:
         print(f"❌ Permission denied: Cannot save plot to '{fig_path}'. Please check folder permissions.")
 
-    # Optionally show and plot rejection log
     plt.show()
     reject_log.plot("horizontal")
 
