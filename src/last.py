@@ -63,18 +63,28 @@ def load_eeg_data(subject_id, task_id, config=None, save_dir=None):
 
 
 def suppress_line_noise_multitaper_and_clean(subject_id, task_id, config=None):
-
     if config is None:
         raise ValueError("Config must be provided.")
+    if "target_dir" not in config:
+        raise ValueError("config['target_dir'] is required.")
 
+    line_freq   = float(config["line_freq"])
+    scan_hz     = float(config["scan_hz"])
+    window_s    = float(config["window_s"])
+    step_s      = float(config["step_s"])
+    bandwidth   = float(config["multitaper_bandwidth"])
+    p_thresh    = float(config["p_threshold"])
+    max_harm    = int(config["max_harmonics"])
+    picks_arg   = config["picks"]
+
+    #  Read RAW once via cache from load_eeg_data (centralized montage, picks, bandpass)
     filepath = get_eeg_filepath(subject_id, task_id, config)
     raw = config.get("_raw_cache")
     if raw is None or raw.filenames[0] != filepath:
-        # Load and set up raw data if not in cache
+        # if not loaded yet, load and cache quickly (mirror load_eeg_data behavior minimally)
         raw = mne.io.read_raw_bdf(filepath, preload=True)
         montage = mne.channels.make_standard_montage("biosemi64")
         raw.set_montage(montage, on_missing="ignore")
-        
         sel_chs = config.get("selected_channels")
         if sel_chs is not None:
             keep = [ch for ch in raw.ch_names if ch in sel_chs and ch in montage.ch_names]
@@ -83,119 +93,197 @@ def suppress_line_noise_multitaper_and_clean(subject_id, task_id, config=None):
             raw.pick_channels(keep)
         else:
             raw.pick([ch for ch in raw.ch_names if ch in montage.ch_names])
-
+        # if bandpass is expected here too
         if "l_freq" in config and "h_freq" in config:
             raw.filter(l_freq=float(config["l_freq"]), h_freq=float(config["h_freq"]))
+        config["_raw_cache"] = raw
 
-    # Use a copy to avoid modifying the cached object
-    raw_copy = raw.copy()
-
-    # Get line frequency from config, defaulting to 60 Hz
-    line_freq = config.get("line_freq", 60.0)
-    
-    # Check for harmonics within the data's Nyquist frequency
-    harmonics = np.arange(line_freq, raw_copy.info['sfreq'] / 2, line_freq)
-
-    # Use a small window to estimate PSD and detect noise
-    psd_raw, freqs_raw = psd_array_multitaper(raw_copy.get_data(), raw_copy.info['sfreq'],
-                                              fmin=harmonics[0] - 2, fmax=harmonics[-1] + 2,
-                                              bandwidth=1, adaptive=False, low_bias=True,
-                                              verbose=False)
-    
-    # Calculate the t-statistic for each harmonic
-    t_scores = []
-    for f in harmonics:
-        # Find the index of the line frequency in the frequency array
-        freq_idx = np.argmin(np.abs(freqs_raw - f))
-        
-        # Define a small local window around the frequency
-        window = 2
-        local_psd = psd_raw[:, max(0, freq_idx - window):min(len(freqs_raw), freq_idx + window + 1)]
-        
-        # Calculate t-statistic to compare the peak to its surroundings
-        peak_psd = local_psd[:, freq_idx - max(0, freq_idx - window)]
-        other_psd = np.concatenate((local_psd[:, :freq_idx - max(0, freq_idx - window)],
-                                    local_psd[:, freq_idx - max(0, freq_idx - window) + 1:]), axis=1)
-        
-        mean_other = np.mean(other_psd, axis=1)
-        std_other = np.std(other_psd, axis=1)
-        
-        t = (peak_psd - mean_other) / (std_other + 1e-9)
-        t_scores.append(t)
-    
-    # Find channels with significant line noise (e.g., t > 3)
-    t_scores = np.array(t_scores)
-    bad_channels = np.where(np.any(t_scores > 3, axis=0))[0]
-    
-    # If bad channels are detected, apply a notch filter to them
-    if len(bad_channels) > 0:
-        raw_copy.notch_filter(
-            freqs=harmonics,
-            picks=[raw_copy.ch_names[i] for i in bad_channels],
-            method='spectrum_fit',
-            mt_bandwidth=1,
-            verbose=False
-        )
-        print(f"Notch filtered {len(bad_channels)} channels for line noise at {line_freq} Hz.")
+    # ---- Resolve picks once, cache them
+    picks_cache_key = ("_picks_cache", tuple(raw.ch_names), str(picks_arg))
+    if config.get("_picks_cache_key") != picks_cache_key:
+        if isinstance(picks_arg, str) and picks_arg.lower() == "eeg":
+            ch_idxs = mne.pick_types(raw.info, eeg=True, exclude=[])
+        elif isinstance(picks_arg, (list, tuple, np.ndarray)):
+            ch_idxs = mne.pick_channels(raw.ch_names, include=list(picks_arg), exclude=[])
+        else:
+            ch_idxs = np.arange(len(raw.ch_names))
+        config["_picks_cache"] = ch_idxs
+        config["_picks_cache_key"] = picks_cache_key
     else:
-        print("No significant line noise detected. Skipping notch filtering.")
-        
-    return raw_copy
+        ch_idxs = config["_picks_cache"]
+
+    sfreq = raw.info["sfreq"]
+    data = raw.get_data(picks=ch_idxs)
+    n_ch, n_samp = data.shape
+
+    win_len = int(round(window_s * sfreq))
+    hop = int(round(step_s * sfreq))
+    if win_len <= 0 or win_len > n_samp:
+        raise ValueError("Invalid window length.")
+
+    t = (np.arange(win_len) - win_len / 2) / sfreq
+    starts = np.arange(0, n_samp - win_len + 1, hop)
+
+    print(f"[CleanLine-like] {len(starts)} windows, win/hop={window_s}/{step_s}s, "
+          f"scan=±{scan_hz} Hz, f0={line_freq} Hz, harmonics={max_harm}")
+
+    cleaned = data.copy()
+
+    for ch_i in range(n_ch):
+        x = data[ch_i]
+        for s0 in starts:
+            seg = x[s0:s0 + win_len]
+            for h in range(1, max_harm + 1):
+                target = line_freq * h
+                if target >= sfreq / 2:
+                    continue
+
+                fmin = max(target - scan_hz, 0.1)
+                fmax = target + scan_hz
+                psd, freqs = psd_array_multitaper(
+                    seg[np.newaxis, :], sfreq=sfreq,
+                    fmin=fmin, fmax=fmax,
+                    bandwidth=bandwidth, adaptive=False,
+                    normalization="full", verbose=False
+                )
+                f_peak = float(freqs[int(np.argmax(psd[0]))])
+
+                s = np.sin(2 * np.pi * f_peak * t)
+                c = np.cos(2 * np.pi * f_peak * t)
+                X = np.vstack([s, c]).T
+                beta, _, _, _ = np.linalg.lstsq(X, seg, rcond=None)
+                y_hat = X @ beta
+                resid = seg - y_hat
+
+                dof = max(len(seg) - 2, 1)
+                sigma2 = float(np.dot(resid, resid)) / dof
+                XtX_inv = np.linalg.inv(X.T @ X)
+                se = np.sqrt(np.diag(XtX_inv) * sigma2)
+                with np.errstate(divide="ignore", invalid="ignore"):
+                    t_vals = beta / se
+                t_max = np.nanmax(np.abs(t_vals))
+                p_val = 2.0 * student_t.sf(t_max, dof)
+
+                if p_val <= p_thresh:
+                    cleaned[ch_i, s0:s0 + win_len] = resid
+                    seg = resid  # update for higher harmonics
+
+        if n_ch >= 10 and (ch_i + 1) % max(1, n_ch // 10) == 0:
+            print(f"  processed channel {ch_i+1}/{n_ch}")
+
+    raw_clean = raw.copy()
+    raw_clean._data[ch_idxs, :] = cleaned
+    return raw_clean
 
 
 def wavelet_denoise_epochs_from_epochs(subject_id, task_id, config=None):
-
     if config is None:
         raise ValueError("Config must be provided.")
-    
-    # Use the existing function to handle all data loading and caching
-    raw, epochs = load_eeg_data(subject_id, task_id, config)
-    
+    for k in ["target_dir", "epoch_duration"]:
+        if k not in config:
+            raise ValueError(f"config['{k}'] is required.")
+
+    # ---- Reuse RAW and EPOCHS from cache if present; otherwise load once
+    filepath = get_eeg_filepath(subject_id, task_id, config)
+    raw = config.get("_raw_cache")
+    if raw is None or raw.filenames[0] != filepath:
+        raw = mne.io.read_raw_bdf(filepath, preload=True, verbose=False)
+        montage = mne.channels.make_standard_montage("biosemi64")
+        raw.set_montage(montage, on_missing="ignore")
+        sel_chs = config.get("selected_channels")
+        if sel_chs is not None:
+            keep = [ch for ch in raw.ch_names if ch in sel_chs and ch in montage.ch_names]
+            if not keep:
+                raise ValueError("No selected_channels found in data.")
+            raw.pick_channels(keep)
+        else:
+            raw.pick([ch for ch in raw.ch_names if ch in montage.ch_names])
+        config["_raw_cache"] = raw
+
+    epochs = config.get("_epochs_cache")
+    epoch_key = (filepath, float(config["epoch_duration"]))
+    if epochs is None or config.get("_epochs_key") != epoch_key:
+        epoch_dur = float(config["epoch_duration"])
+        epochs = mne.make_fixed_length_epochs(
+            raw, duration=epoch_dur, preload=True, verbose=False
+        )
+        print(f"Created {len(epochs)} epochs, each {epochs.tmax - epochs.tmin + 1:.1f} s long")
+        config["_epochs_cache"] = epochs
+        config["_epochs_key"] = epoch_key
+
     # ---- ICA (Picard)
     n_comp = min(20, len(epochs.ch_names))
-    ica = ICA(n_components=n_comp, method="picard", random_state=42, 
-              max_iter=500, verbose=False)
+    ica = ICA(n_components=n_comp, method="picard", random_state=42, max_iter=500, verbose=False)
     ica.fit(epochs)
-    
+
     # Sources: (n_epochs, n_comp, n_times)
     src = ica.get_sources(epochs).get_data()
-    n_ep, n_comp, n_times = src.shape
-    
+    n_ep, n_comp, _ = src.shape
+
     # ---- Wavelet (SWT) denoising on sources
     wavelet = "coif5"
     max_level = 5
-    
     den = np.empty_like(src)
+
     for e in range(n_ep):
         for c in range(n_comp):
             sig = src[e, c, :]
-            
-            # Skip denoising if signal is too short for a meaningful wavelet level
             level = min(max_level, pywt.swt_max_level(len(sig)))
             if level < 1:
                 den[e, c, :] = sig
                 continue
-            
+
             coeffs = pywt.swt(sig, wavelet, level=level, trim_approx=False)
-            
-            # Extract detail coefficients and apply soft thresholding
-            detail_coeffs = [cD for cA, cD in coeffs]
-            all_D = np.concatenate([d.ravel() for d in detail_coeffs])
-            sigma = (np.median(np.abs(all_D)) / 0.6745) if all_D.size else 0.0
-            thr = sigma * np.sqrt(2.0 * np.log(max(len(sig), 2)))
-            
-            # Reconstruct signal from thresholded coefficients
-            thr_coeffs = [(cA, pywt.threshold(cD, thr, mode="soft")) for cA, cD in coeffs]
-            rec = pywt.iswt(thr_coeffs, wavelet)
-            
-            # Handle potential reconstruction length mismatch
-            den[e, c, :] = rec[:n_times]
-            
-    # ---- Reconstruct sensor-space epochs from denoised sources
-    cleaned_epochs = epochs.copy()
-    cleaned_epochs._data = np.einsum("fc,ect->eft", ica.mixing_matrix_, den)
-    
-    # Save the cleaned epochs if a directory is specified
+
+            # Normalize coeffs to (cA, cD) pairs robustly
+            pairs = []
+            for elem in coeffs:
+                if isinstance(elem, (list, tuple)) and len(elem) == 2:
+                    cA, cD = elem
+                else:
+                    cA, cD = elem[0], elem[1]
+                pairs.append((cA, cD))
+
+            # Estimate sigma from all detail coeffs
+            if pairs:
+                detail_list = [cD for (_, cD) in pairs]
+                all_D = np.concatenate([d.ravel() for d in detail_list]) if detail_list else np.array([])
+                sigma = (np.median(np.abs(all_D)) / 0.6745) if all_D.size else 0.0
+            else:
+                sigma = 0.0
+            Thr = sigma * np.sqrt(2.0 * np.log(max(len(sig), 2)))
+
+            # Soft-threshold detail coeffs, keep approximations
+            thr_pairs = [(cA, pywt.threshold(cD, Thr, mode="soft")) for (cA, cD) in pairs]
+            rec = pywt.iswt(thr_pairs, wavelet)
+            if rec.shape[-1] != sig.shape[-1]:
+                rec = rec[..., : sig.shape[-1]]
+            den[e, c, :] = rec
+
+    # ---- Reconstruct sensor-space epochs directly via the mixing matrix
+    # A: (n_channels, n_comp)
+    A = ica.mixing_matrix_
+
+    # Ensure orientation is (n_channels, n_comp)
+    if A.shape[0] != len(epochs.ch_names) and A.shape[1] == len(epochs.ch_names):
+        A = A.T
+
+    if A.shape[0] != len(epochs.ch_names):
+        raise ValueError(
+            f"Mixing matrix channels ({A.shape[0]}) != epochs channels ({len(epochs.ch_names)})."
+        )
+    if A.shape[1] != den.shape[1]:
+        raise ValueError(
+            f"Mixing matrix component count ({A.shape[1]}) != denoised source count ({den.shape[1]})."
+        )
+
+    # den: (n_epochs, n_comp, n_times) -> X_rec: (n_epochs, n_channels, n_times)
+    X_rec = np.einsum("fc,ect->eft", A, den)
+
+    cleaned_epochs = mne.EpochsArray(
+        X_rec, info=epochs.info.copy(), tmin=epochs.tmin, verbose=False
+    )
+
     if config.get("processed_dir"):
         os.makedirs(config["processed_dir"], exist_ok=True)
         outp = os.path.join(
@@ -204,7 +292,7 @@ def wavelet_denoise_epochs_from_epochs(subject_id, task_id, config=None):
         )
         cleaned_epochs.save(outp, overwrite=True)
         print(f"Saved W-ICA epochs to: {outp}")
-        
+
     return cleaned_epochs
 
 

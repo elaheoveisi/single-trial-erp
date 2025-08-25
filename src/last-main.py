@@ -4,9 +4,6 @@ import os
 import mne
 from mne.preprocessing import ICA
 import pywt
-import numpy as np
-import openneuro
-
 
 from data.load import download_data
 from data.preprocessing import  load_eeg_data,suppress_line_noise_multitaper_and_clean,wavelet_denoise_epochs_from_epochs, clean_eeg, preprocess_all_subjects_tasks, wavelet_denoise_epochs_from_epochs,get_eeg_filepath
@@ -37,23 +34,20 @@ task_id = config["tasks"][0]
 filepath = get_eeg_filepath(subject_id, task_id, config)
 
 
-with skip_run("skip", "load eeg") as check:
+with skip_run("run", "load_eeg_data") as check:
     if check():
-        subjects = config["subjects"]
-        tasks = config["tasks"]
-        load_eeg_data(subject_id=subjects[0], task_id=tasks[0], config=config)
+        raw, epochs = load_eeg_data(filepath, config)
 
 
-with skip_run("skip", "load_eeg") as check:
+with skip_run("run", "suppress_line_noise") as check:
     if check():
-        subjects = config["subjects"]
-        tasks = config["tasks"]
-
-        raw , epochs = load_eeg_data(
-            subject_id=subjects[0],
-            task_id=tasks[0],
-            config=config
+        raw = suppress_line_noise_multitaper_and_clean(
+            raw,
+            line_freq=config.get("line_freq", 60.0),
+            bandwidth=config.get("multitaper_bandwidth", 4.0),
+            threshold=config.get("multitaper_threshold", 1e-10),
         )
+
 
 
 
@@ -65,14 +59,17 @@ with skip_run("skip", "suppress_line_noise") as check:
             config=config
         )
 
+        
 
-with skip_run("run", "wavelet") as check:
+
+
+with skip_run("skip" if config.get("use_wavelet_denoising", False) else "skip", "wavelet_denoising") as check:
     if check():
-        subjects = config["subjects"]
-        tasks = config["tasks"]
-        wavelet_denoise_epochs_from_epochs(subject_id=subjects[0], task_id=tasks[0], config=config)
-
-
+        epochs = wavelet_denoise_epochs_from_epochs(
+            epochs,
+            wavelet=config.get("wavelet", "coif5"),
+            level=config.get("wavelet_level", 5),
+        )
 
 
 
@@ -81,7 +78,6 @@ with skip_run("skip", "clean_example_data") as check:
         subjects = config["subjects"]
         tasks = config["tasks"]
         clean_eeg(subject_id=subjects[0], task_id=tasks[0], config=config)
-
 
 
 with skip_run("skip", "clean_all_data") as check, check():

@@ -2,11 +2,83 @@
 dataset: 'ds005841'
 subjects: ['001', '002']
 tasks: ['lumfront', 'lumperp']
+selected_channels:
 
-# Save folders
-save_dir: outputs
-save_plot_dir: data/plots
+  - 'AF7'
+  - 'AF3'
+  - 'AFz'
+  - 'AF4'
+  - 'AF8'
+  - 'F7'
+  - 'F5'
+  - 'F3'
+  - 'Fz'
+  - 'F2'
+  - 'F4'
+  - 'F6'
+  - 'F8'
+  - 'FT7'
+  - 'FC5'
+  - 'FC3'
+  - 'FC1'
+  - 'FC4'
+  - 'FC6'
+  - 'FT8'
+
 
 # Data paths
+
+processed_dir: data/processed
+ 
+l_freq: 1.0      # low cutoff frequency (Hz)
+h_freq: 40.0
+# Epoching
+epoch_duration: 2.0   # seconds (total length of each epoch)
+tmin: -0.2            # seconds relative to event
+tmax: 1.8             # must satisfy tmax - tmin == epoch_duration
+baseline: [-0.2, 0.0] # baseline interval (start, end)
+
+
+
+
 target_dir: data/raw
 processed_dir: data/processed
+save_dir: data/outputs
+save_plot_dir: data/plots
+processed_dir: data/processed
+
+line_freq: 60.0
+scan_hz: 2.0
+window_s: 4.0
+step_s: 1.0
+multitaper_bandwidth: 4.0
+p_threshold: 0.01
+max_harmonics: 3
+picks: eeg                  
+
+
+line_freq: 60.0
+scan_hz: 2.0
+window_s: 4.0
+step_s: 1.0
+multitaper_bandwidth: 4.0
+p_threshold: 0.01
+max_harmonics: 3
+
+# Wavelet-enhanced ICA (W-ICA) before ICA
+use_wavelet_denoising: true
+wavelet: coif5
+wavelet_level: 5
+
+# ICA
+ica_n_components: 20
+ica_method: picard
+ica_random_state: 42
+method: picard
+max_iter: 500        # <-- NOT "500"
+random_state: 11
+n_components: 25
+
+# Artifact / rejection
+use_autoreject: false
+reject_criteria_uv: 150.0
