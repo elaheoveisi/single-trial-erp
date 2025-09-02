@@ -66,7 +66,7 @@ with skip_run("skip", "suppress_line_noise") as check:
         )
 
 
-with skip_run("run", "wavelet") as check:
+with skip_run("skip", "wavelet") as check:
     if check():
         subjects = config["subjects"]
         tasks = config["tasks"]
@@ -76,7 +76,7 @@ with skip_run("run", "wavelet") as check:
 
 
 
-with skip_run("skip", "clean_example_data") as check:
+with skip_run("run", "clean_example_data") as check:
     if check():
         subjects = config["subjects"]
         tasks = config["tasks"]
