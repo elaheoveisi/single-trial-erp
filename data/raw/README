@@ -1,0 +1,20 @@
+# EEG Experiment Measuring ERPs in VR
+
+This dataset contains EEG recordings from a study investigating event-related potentials (ERPs) during different visual tasks in virtual reality.
+
+## Study Design
+- **Participants**: 48 participants
+- **Tasks**: 
+  - Lumfront
+  - Lumperp
+  - Regfront
+  - Regperp
+  - Signalscreen
+  - Signalvr
+- **Modality**: EEG (512 Hz sampling rate)
+
+## Dataset Organization
+The dataset follows the BIDS specification (version 1.6.0). Each subject folder contains EEG recordings and associated metadata.
+
+## Funding and Acknowledgements
+This study was supported by a doctoral studentship awarded to EK. We thank the participants for their time. 

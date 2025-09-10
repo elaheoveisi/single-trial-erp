@@ -9,13 +9,15 @@ config_path = "configs/config.yml"
 config = yaml.load(open(str(config_path)), Loader=yaml.SafeLoader)
 
 with skip_run("skip", "download_data") as check, check():
-    download_data(config["subjects"], tasks=config["tasks"], config=config)
+    download_data(config["subject_ids"], tasks=config["tasks"], config=config)
 
 
-with skip_run("skip", "clean_example_data") as check, check():
-    subjects = config["subjects"]
+with skip_run("run", "clean_example_data") as check, check():
+    subjects = config["subject_ids"]
     tasks = config["tasks"]
+    # Use task_id (not "tasks") to match clean_eeg signature
     clean_eeg(subject_id=subjects[0], task_id=tasks[0], config=config)
+
 
 with skip_run("skip", "clean_all_data") as check, check():
     preprocess_all_subjects_tasks(

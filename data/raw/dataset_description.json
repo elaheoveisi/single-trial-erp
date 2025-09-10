@@ -1,0 +1,12 @@
+{
+    "Name": "EEG Experiment measuring ERPs in VR",
+    "BIDSVersion": "1.6.0",
+    "Authors": [
+        "Elena Karakashevska",
+        "Alexis Makin",
+        "Michael Batterley"
+    ],
+    "Acknowledgements": "Thanks to all participants and collaborators.",
+    "DatasetDOI": "doi:10.18112/openneuro.ds005841.v1.0.0",
+    "License": "CC0"
+}
