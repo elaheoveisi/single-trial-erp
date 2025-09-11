@@ -12,14 +12,14 @@ with skip_run("skip", "download_data") as check, check():
     download_data(config["subject_ids"], tasks=config["tasks"], config=config)
 
 
-with skip_run("run", "clean_example_data") as check, check():
+with skip_run("skip", "clean_example_data") as check, check():
     subjects = config["subject_ids"]
     tasks = config["tasks"]
     # Use task_id (not "tasks") to match clean_eeg signature
     clean_eeg(subject_id=subjects[0], task_id=tasks[0], config=config)
 
 
-with skip_run("skip", "clean_all_data") as check, check():
+with skip_run("run", "clean_all_data") as check, check():
     preprocess_all_subjects_tasks(
-        config["subjects"], tasks=config["tasks"], config=config
+        config["subject_ids"], tasks=config["tasks"], config=config
     )
